@@ -286,7 +286,7 @@
     <section class="panel active" id="p-itin">
       <div class="section-head">
         <h2>🗺️ The Plan</h2>
-        <p>Coastal escape while Escondido bakes. Built flat & crutch-friendly — no soft-sand marches.</p>
+        <p>Coastal escape while Escondido bakes. Built flat & crutch-friendly — and we eat first.</p>
       </div>
 
       <div class="card pick">
@@ -307,12 +307,12 @@
 
       <div class="card">
         <div class="timeline">
-          <div class="tl"><div class="time">11:00 AM</div><div class="what">Roll out of Esco 🚗</div><div class="note">Beat the heat & the parking crunch. Sunscreen on before you leave.</div></div>
-          <div class="tl"><div class="time">11:45</div><div class="what">Park + reserve the beach wheelchair</div><div class="note">Upper 60s–low 70s at the coast vs. 90s+ at home. Instant relief.</div></div>
-          <div class="tl"><div class="time">12:15 PM</div><div class="what">Lunch with an ocean view 🍤</div><div class="note">Take it slow — this is the "fun place to eat." Play a round of Would You Rather at the table.</div></div>
+          <div class="tl"><div class="time">11:15 AM</div><div class="what">Roll out of Esco — hungry 🚗</div><div class="note">Beat the heat & the parking crunch. Sunscreen on before you leave.</div></div>
+          <div class="tl"><div class="time">12:00 PM</div><div class="what">EAT FIRST — beachfront lunch 🍤</div><div class="note">First stop, no waiting. This is the "fun place to eat." Ocean-view table, take it slow, play a round of Would You Rather while you order.</div></div>
+          <div class="tl"><div class="time">1:15</div><div class="what">Reserve the beach wheelchair + settle in</div><div class="note">Grab it from the lifeguard station so Scarlette can get on the sand with everyone.</div></div>
           <div class="tl"><div class="time">1:30</div><div class="what">Blanket time on the grass 🌊</div><div class="note">Summer Awards ceremony, then the goals convo. Low-pressure, screens down.</div></div>
           <div class="tl"><div class="time">3:00</div><div class="what">Toes in the water / stroll the seawall</div><div class="note">Beach wheelchair for the sand, or the flat path if she'd rather cruise.</div></div>
-          <div class="tl"><div class="time">5:30</div><div class="what">Early dinner or ice cream run 🍦</div><div class="note">Cross one off the bucket list on the way out.</div></div>
+          <div class="tl"><div class="time">5:30</div><div class="what">Ice cream run 🍦</div><div class="note">Cross one off the bucket list on the way out.</div></div>
           <div class="tl"><div class="time">Golden hour</div><div class="what">Sunset before the drive home 🌅</div><div class="note">The one photo op nobody regrets.</div></div>
         </div>
       </div>
@@ -394,7 +394,7 @@
         <button class="addbtn" id="bktAdd" aria-label="Add to bucket list">+</button>
       </div>
       <div id="bktList"></div>
-      <p class="footnote">Everything here saves on this device. Ask Dad to sync it across everyone's phones. 🌊</p>
+      <p class="footnote">🟢 <span id="syncStatus">Connecting…</span> · Every change syncs to the whole family's phones automatically. 🌊</p>
     </section>
   </main>
 
@@ -411,12 +411,13 @@
 (function(){
   "use strict";
   var LS="apodacaBeachDay_v1";
+  var SYNC_URL="https://jsonblob.com/api/jsonBlob/019fbe4c-5f53-7ed7-9516-8cca421001d0";
   var COLORS={teal:"var(--teal)",coral:"var(--coral)",gold:"var(--gold)",sea:"var(--sea)",deep:"var(--deep)"};
 
   var defaults={
     people:[
-      {id:"p1",name:"Dad",color:"teal",em:"🧢"},
-      {id:"p2",name:"Mom",color:"coral",em:"🌸"},
+      {id:"p1",name:"Papa",color:"teal",em:"🧢"},
+      {id:"p2",name:"Mama",color:"coral",em:"🌸"},
       {id:"p3",name:"Scarlette · 15",color:"gold",em:"⚾"},
       {id:"p4",name:"Jules · 12",color:"sea",em:"🌟"}
     ],
@@ -474,12 +475,45 @@
 
   var state=load();
   var ui={person:state.people[0].id, cat:"faith", wyr:0};
+  var lastSyncedStr="";     // JSON we last pushed or applied from remote (echo guard)
+  var pushTimer=null;
 
   function load(){
     try{var s=JSON.parse(localStorage.getItem(LS)); if(s&&s.people) return s;}catch(e){}
     return JSON.parse(JSON.stringify(defaults));
   }
-  function save(){ try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){} }
+  function cache(){ try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){} }
+  function save(){ cache(); schedulePush(); }
+
+  function schedulePush(){
+    var str=JSON.stringify(state);
+    lastSyncedStr=str;
+    setStatus("Saving…");
+    if(pushTimer) clearTimeout(pushTimer);
+    pushTimer=setTimeout(function(){ push(str); }, 350);
+  }
+  function push(str){
+    fetch(SYNC_URL,{method:"PUT",headers:{"Content-Type":"application/json","Accept":"application/json"},body:str})
+      .then(function(r){ setStatus(r.ok?"Synced ✓":"Sync error — retrying"); })
+      .catch(function(){ setStatus("Offline — will retry"); });
+  }
+  function typing(){
+    var a=document.activeElement;
+    return !!(a && (a.tagName==="INPUT"||a.tagName==="TEXTAREA"));
+  }
+  function pull(initial){
+    fetch(SYNC_URL,{headers:{"Accept":"application/json"},cache:"no-store"})
+      .then(function(r){ return r.ok?r.json():null; })
+      .then(function(remote){
+        if(!remote || !remote.people){ if(initial) schedulePush(); return; } // seed empty store
+        var str=JSON.stringify(remote);
+        if(initial){ state=remote; lastSyncedStr=str; cache(); renderAll(); setStatus("Live ✓"); return; }
+        if(str!==lastSyncedStr && !typing()){ state=remote; lastSyncedStr=str; cache(); renderAll(); setStatus("Updated just now ✓"); }
+        else if(str===lastSyncedStr){ setStatus("Live ✓"); }
+      })
+      .catch(function(){ setStatus("Offline"); });
+  }
+  function setStatus(t){ var s=el("syncStatus"); if(s) s.textContent=t; }
   function el(id){return document.getElementById(id);}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
   function person(id){for(var i=0;i<state.people.length;i++){if(state.people[i].id===id)return state.people[i];}return null;}
@@ -639,6 +673,11 @@
 
   function renderAll(){renderRoster(); renderAwards(); renderGoals(); renderWyr(); renderBucket();}
   renderAll();
+
+  /* ----- Live family sync ----- */
+  pull(true);
+  setInterval(function(){ pull(false); }, 3000);
+  window.addEventListener("online", function(){ pull(false); });
 })();
 </script>
 </body>
